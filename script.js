@@ -27,6 +27,8 @@ animate.forEach(animate => {
 
 
 
+
+
 /*
 ==================================
 ======== Show more button ========
@@ -34,15 +36,14 @@ animate.forEach(animate => {
 */
 function showMore() {
   var x = document.getElementsByClassName("hidden");
-	
+
   var i;
   for (i = 0; i < x.length; i++) {
     x[i].style.display = "block";
-	  
+
   document.getElementById("showMore").style.display = "none";
-} 
-	
-	
+}
+
+
 
 };
-
