@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        #game {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .combat-result, .equip-screen, .location-choice, .inventory {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #status {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .equip-screen {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+        .inventory {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #fff;
+            transition: transform 0.2s;
+        }
+        .item.equipped {
+            border: 2px solid #4CAF50;
+        }
+        .item.empty {
+            color: #999;
+            background-color: #f5f5f5;
+        }
+        .item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background-color 0.2s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .rarity-Common { color: #666; }
+        .rarity-Uncommon { color: #2e7d32; }
+        .rarity-Rare { color: #1976d2; }
+        .rarity-Epic { color: #9c27b0; }
+        .rarity-Legendary { color: #ff6d00; }
+
+        @keyframes attack-up {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+            100% { transform: translateY(0); }
+        }
+
+        @keyframes attack-down {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(20px); }
+            100% { transform: translateY(0); }
+        }
+
+        .attacking-up {
+            animation: attack-up 0.5s ease-in-out;
+        }
+
+        .attacking-down {
+            animation: attack-down 0.5s ease-in-out;
+        }
+
+        .enemy-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #fff3e0;
+            border-radius: 4px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="game">
+        <div id="status"></div>
+        <div id="combat-result" class="combat-result"></div>
+        <div id="enemy-stats" class="enemy-stats" style="display: none;"></div>
+        <div id="equip-screen" class="equip-screen"></div>
+        <div id="location-choice" class="location-choice"></div>
+        <div id="inventory" class="inventory"></div>
+    </div>
+
+    <script>
+        // Game state management
+        const gameState = {
+            player: {
+                level: 1,
+                health: 3,
+                damage: 1,
+                speed: 2,
+                defense: 0,
+                inventory: [{ name: "Sword", type: "Damage", damage: 2, speed: 0, rarity: "Common" }],
+                maxHealth: 3,
+                equipSlots: { damage: null, magic: null, defense: null },
+                experience: 0,
+                experienceToLevel: 10,
+                canChooseLocation: true
+            },
+
+            locations: ["Battle", "Loot", "Buff", "Rest"],
+
+            enemies: [
+    { name: "Skeleton", damage: 1, health: 1, speed: 1, defense: 0, magic: 0, experience: 1 },
+    { name: "Orc", damage: 2, health: 2, speed: 2, defense: 1, magic: 0, experience: 2 },
+    { name: "Wizard", damage: 2, health: 2, speed: 3, defense: 0, magic: 2, experience: 5 },
+    { name: "Dragon", damage: 5, health: 5, speed: 4, defense: 3, magic: 2, experience: 10 },
+    { name: "Dark Knight", damage: 3, health: 4, speed: 3, defense: 2, magic: 1, experience: 7 },
+    { name: "Demon", damage: 4, health: 3, speed: 5, defense: 1, magic: 3, experience: 8 },
+    { name: "Ancient Golem", damage: 3, health: 6, speed: 1, defense: 4, magic: 0, experience: 10 },
+    { name: "Troll", damage: 3, health: 7, speed: 2, defense: 2, magic: 0, experience: 6 },
+    { name: "Vampire", damage: 4, health: 5, speed: 4, defense: 2, magic: 3, experience: 12 },
+    { name: "Hydra", damage: 6, health: 6, speed: 3, defense: 3, magic: 1, experience: 15 },
+    { name: "Griffin", damage: 4, health: 4, speed: 5, defense: 1, magic: 0, experience: 9 },
+    { name: "Manticore", damage: 5, health: 5, speed: 3, defense: 2, magic: 1, experience: 11 },
+    { name: "Phoenix", damage: 3, health: 8, speed: 2, defense: 3, magic: 5, experience: 20 },
+    { name: "Gorgon", damage: 4, health: 4, speed: 3, defense: 2, magic: 2, experience: 14 },
+    { name: "Lich", damage: 6, health: 6, speed: 2, defense: 3, magic: 4, experience: 18 },
+    { name: "Cthulhu", damage: 10, health: 10, speed: 1, defense: 10, magic: 10, experience: 100 }
+],
+
+items: [
+    { name: "Sword", type: "Damage", damage: 2, speed: 0, rarity: "Common" },
+    { name: "Bow", type: "Damage", damage: 1, speed: 1, rarity: "Common" },
+    { name: "Dagger", type: "Damage", damage: 1, speed: 2, rarity: "Common" },
+    { name: "Warhammer", type: "Damage", damage: 3, speed: -1, rarity: "Uncommon" },
+    //{ name: "Life Ring", type: "Magic", damage: 0, speed: 0, magic: 1, rarity: "Uncommon", effect: "retain_items" },
+    { name: "Trinity Force", type: "Magic", damage: 2, speed: 2, magic: 2, rarity: "Rare" },
+    { name: "Shield", type: "Defense", defense: 2, speed: 0, rarity: "Common" },
+    { name: "Armour", type: "Defense", defense: 3, speed: -1, rarity: "Uncommon" },
+    { name: "Dragon Scale", type: "Defense", defense: 4, speed: 0, magic: 1, rarity: "Epic" },
+    { name: "Excalibur", type: "Damage", damage: 5, speed: 2, rarity: "Legendary" },
+    { name: "Staff of Power", type: "Magic", damage: 3, magic: 3, speed: 0, rarity: "Epic" },
+    { name: "Shadow Blade", type: "Damage", damage: 4, speed: 3, rarity: "Epic" },
+    { name: "Crystal Shield", type: "Defense", defense: 3, magic: 2, rarity: "Rare" },
+    { name: "Golden Dagger", type: "Damage", damage: 2, speed: 2, rarity: "Rare" },
+    { name: "Ice Sword", type: "Damage", damage: 4, speed: 1, magic: 1, rarity: "Epic" },
+    { name: "Venomous Bow", type: "Damage", damage: 2, speed: 1, magic: 2, rarity: "Epic" },
+    { name: "Fire Shield", type: "Defense", defense: 2, magic: 3, rarity: "Epic" },
+    { name: "Phoenix Feather", type: "Magic", damage: 3, speed: 1, magic: 5, rarity: "Legendary" },
+    { name: "Thunder Hammer", type: "Damage", damage: 6, speed: -2, magic: 3, rarity: "Legendary" },
+    { name: "Mystic Robe", type: "Defense", defense: 2, speed: 1, magic: 4, rarity: "Epic" },
+    { name: "Wand of Willow", type: "Magic", damage: 5, speed: 5, magic: 5, rarity: "Legendary" },
+    { name: "Moonlight Armor", type: "Defense", defense: 5, speed: 1, magic: 1, rarity: "Legendary" },
+    { name: "Dark Crystal", type: "Magic", damage: 5, magic: 5, speed: 0, rarity: "Epic" }
+]
+
+        };
+
+        function generateEnemy() {
+            const availableEnemies = gameState.enemies.filter(enemy =>
+                enemy.health <= gameState.player.level * 2
+            );
+            return structuredClone(availableEnemies[Math.floor(Math.random() * availableEnemies.length)]);
+        }
+
+        function showEnemyStats(enemy) {
+            const enemyStatsDiv = document.getElementById("enemy-stats");
+            enemyStatsDiv.style.display = "grid";
+            enemyStatsDiv.innerHTML = `
+                <div>🛡️ ${enemy.defense}</div>
+                <div>🔮 ${enemy.magic}</div>
+                <div>⚔️ ${enemy.damage}</div>
+            `;
+        }
+
+        function hideEnemyStats() {
+            document.getElementById("enemy-stats").style.display = "none";
+        }
+
+        async function performAttack(attacker, defender, isPlayer) {
+            const slotType = isPlayer ? 'attacking-up' : 'attacking-down';
+            const damageSlot = document.querySelector(`[data-slot="${isPlayer ? 'damage' : 'enemy-damage'}"]`);
+            if (damageSlot) {
+                damageSlot.classList.add(slotType);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                damageSlot.classList.remove(slotType);
+            }
+
+            const defense = defender.defense || 0;
+            const actualDamage = Math.max(0, attacker.damage - defense);
+            defender.health -= actualDamage;
+            updatePlayerStats(0,0,0, -actualDamage || 0);
+            updateUI();
+            return `${isPlayer ? 'You' : attacker.name} deal ${actualDamage} damage to ${isPlayer ? defender.name : 'you'} (${defense} blocked)`;
+        }
+
+        function equipItem(itemIndex) {
+            const item = gameState.player.inventory[itemIndex];
+            const slot = item.type.toLowerCase();
+
+            if (gameState.player.equipSlots[slot]) {
+                const oldItem = gameState.player.equipSlots[slot];
+                gameState.player.inventory.push(oldItem);
+                updatePlayerStats(-oldItem.damage || 0, -oldItem.speed || 0, -oldItem.defense || 0, 0);
+            }
+
+            gameState.player.equipSlots[slot] = item;
+            gameState.player.inventory.splice(itemIndex, 1);
+            updatePlayerStats(item.damage || 0, item.speed || 0, item.defense || 0, 0);
+
+            updateUI();
+        }
+
+        function updatePlayerStats(damage, speed, defense, health) {
+            gameState.player.damage += damage || 0;
+            gameState.player.speed += speed || 0;
+            gameState.player.defense += defense || 0;
+            gameState.player.health += health || 0;
+        }
+
+        async function combat(enemy) {
+            const combatLog = [];
+            const playerFirst = gameState.player.speed >= enemy.speed;
+
+            showEnemyStats(enemy);
+
+            if (playerFirst) {
+                combatLog.push(await performAttack(gameState.player, enemy, true));
+                if (enemy.health > 0) {
+                    combatLog.push(await performAttack(enemy, gameState.player, false));
+                }
+            } else {
+                combatLog.push(await performAttack(enemy, gameState.player, false));
+                if (gameState.player.health > 0) {
+                    combatLog.push(await performAttack(gameState.player, enemy, true));
+                }
+            }
+
+            setTimeout(hideEnemyStats, 2000);
+
+            return {
+                result: gameState.player.health <= 0 ? "lose" : enemy.health <= 0 ? "win" : "draw",
+                log: combatLog
+            };
+        }
+
+        function chooseLocation(location) {
+            if (location !== "Battle" && !gameState.player.canChooseLocation) {
+                showMessage("You must battle first!");
+                return;
+            }
+
+            if (location === "Battle") {
+                gameState.player.canChooseLocation = true;
+            } else {
+                gameState.player.canChooseLocation = false;
+            }
+
+            switch(location) {
+                case "Battle":
+                    const enemy = generateEnemy();
+                    showMessage(`You encountered a ${enemy.name}!`);
+
+                    setTimeout(() => {
+                        combat(enemy).then(battleResult => {
+                            const logText = battleResult.log.join('<br>');
+
+                            if (battleResult.result === "win") {
+                                gainExperience(enemy.experience);
+                                if (Math.random() < 0.3) {
+                                    const loot = gameState.items[Math.floor(Math.random() * gameState.items.length)];
+                                    gameState.player.inventory.push(structuredClone(loot));
+                                    showMessage(`${logText}<br><br>Victory! You found a ${loot.name}!`);
+                                } else {
+                                    showMessage(`${logText}<br><br>Victory!`);
+                                }
+                                gameState.player.canChooseLocation = true;
+                            } else {
+                                if (!gameState.player.equipSlots.magic?.effect === "retain_items") {
+                                    const slots = Object.keys(gameState.player.equipSlots).filter(slot =>
+                                        gameState.player.equipSlots[slot] !== null
+                                    );
+                                    if (slots.length > 0) {
+                                        const randomSlot = slots[Math.floor(Math.random() * slots.length)];
+                                        gameState.player.equipSlots[randomSlot] = null;
+                                    }
+                                }
+                                gameState.player.health = gameState.player.maxHealth;
+                                showMessage(`${logText}<br><br>Defeat! But you live to fight another day.`);
+                            }
+                            updateUI();
+                        });
+                    }, 1000);
+                    break;
+
+                    case "Loot":
+                       const loot = gameState.items[Math.floor(Math.random() * gameState.items.length)];
+                       gameState.player.inventory.push(structuredClone(loot));
+                       showMessage(`You found a ${loot.name}!`);
+                       break;
+
+                   case "Buff":
+                       const buffAmount = Math.ceil(gameState.player.level * 0.5);
+                       gameState.player.maxHealth += buffAmount;
+                       gameState.player.health = gameState.player.maxHealth;
+                       showMessage(`Your maximum health increased by ${buffAmount}!`);
+                       break;
+
+                   case "Rest":
+                       const healAmount = Math.ceil(gameState.player.maxHealth * 0.3);
+                       gameState.player.health = Math.min(
+                           gameState.player.maxHealth,
+                           gameState.player.health + healAmount
+                       );
+                       showMessage(`You rest and recover ${healAmount} health.`);
+                       break;
+               }
+               updateUI();
+           }
+
+        function gainExperience(amount) {
+            gameState.player.experience += amount;
+            if (gameState.player.experience >= gameState.player.experienceToLevel) {
+                levelUp();
+            }
+        }
+
+        function levelUp() {
+            gameState.player.level++;
+            gameState.player.damage = Math.floor(gameState.player.level * 1.5);
+            gameState.player.maxHealth = Math.min(20, gameState.player.maxHealth + 2);
+            gameState.player.health = gameState.player.maxHealth;
+            gameState.player.experience -= gameState.player.experienceToLevel;
+            gameState.player.experienceToLevel = Math.floor(gameState.player.experienceToLevel * 1.5);
+
+            showMessage(`Level Up! You are now level ${gameState.player.level}`);
+        }
+
+        function showMessage(message) {
+            const result = document.getElementById("combat-result");
+            result.innerHTML = `<p>${message}</p>`;
+        }
+
+        function updateUI() {
+    document.getElementById("status").innerHTML = `
+        ⭐ ${gameState.player.level} |
+        ❤️ ${gameState.player.health}/${gameState.player.maxHealth} |
+        ⚔️ ${gameState.player.damage} |
+        🏃‍♂️ ${gameState.player.speed} |
+        🛡️ ${gameState.player.defense} |
+        📊 ${gameState.player.experience}/${gameState.player.experienceToLevel}
+    `;
+
+    // Update inventory
+            document.getElementById("inventory").innerHTML = gameState.player.inventory.map((item, index) => `
+                <div class="item">
+                    <div class="rarity-${item.rarity}">${item.name} (${item.rarity})</div>
+                    <div>Type: ${item.type}</div>
+                    ${item.damage ? `<div>⚔️ ${item.damage}</div>` : ''}
+                    ${item.speed ? `<div>🏃‍♂️ ${item.speed}</div>` : ''}
+                    ${item.defense ? `<div>🛡️ ${item.defense}</div>` : ''}
+                    ${item.magic ? `<div>🔮 ${item.magic}</div>` : ''}
+                    ${item.effect ? `<div>✨ ${item.effect}</div>` : ''}
+                    <button onclick="equipItem(${index})">Equip</button>
+                </div>
+            `).join('');
+
+            // Update equipment
+            document.getElementById("equip-screen").innerHTML = Object.entries(gameState.player.equipSlots)
+                .map(([slot, item]) => `
+                    <div class="item ${item ? 'equipped' : 'empty'}" data-slot="${slot}">
+                        <div>${slot.charAt(0).toUpperCase() + slot.slice(1)}:</div>
+                        ${item ? `
+                            <div class="rarity-${item.rarity}">${item.name} (${item.rarity})</div>
+                            ${item.damage ? `<div>⚔️ ${item.damage}</div>` : ''}
+                            ${item.speed ? `<div>🏃‍♂️ ${item.speed}</div>` : ''}
+                            ${item.defense ? `<div>🛡️ ${item.defense}</div>` : ''}
+                            ${item.magic ? `<div>🔮 ${item.magic}</div>` : ''}
+                        ` : 'Empty'}
+                    </div>
+                `).join('');
+
+            // Update location choices
+            document.getElementById("location-choice").innerHTML = gameState.locations
+                .map(loc => `
+                    <button
+                        onclick="chooseLocation('${loc}')"
+                        ${loc !== 'Battle' && !gameState.player.canChooseLocation ? 'disabled' : ''}
+                    >
+                        ${loc}
+                    </button>
+                `)
+                .join('');
+        }
+
+        // Initialize game
+        updateUI();
+    </script>
+</body>
+</html>
